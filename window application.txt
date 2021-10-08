@@ -1,0 +1,117 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using AxMapWinGIS;
+using MapWinGIS;
+using RestSharp;
+using Newtonsoft.Json.Linq ;
+using System.IO;
+
+
+// 현재는 검색 버튼을 눌렀을 때, 공간 데이터를 생성하고 레이어 추가
+// 더블 클릭 했을 때, 해당 데이터만 포인트로 생성
+
+namespace Ex04
+{
+    public partial class Form1 : Form
+    {
+        JArray items;
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            // 맵 좌표계 설정
+            axMap1.Projection = tkMapProjection.PROJECTION_GOOGLE_MERCATOR;
+            axMap1.TileProvider = tkTileProvider.OpenStreetMap;
+            axMap1.KnownExtents = tkKnownExtents.keSouth_Korea;
+
+            // 맵 커서 모드 변경
+            axMap1.CursorMode = tkCursorMode.cmPan;
+        }
+
+        private void btnSearch_Click(object sender, EventArgs e)
+        {
+            // 초기화
+            lbData.Items.Clear();
+            axMap1.RemoveAllLayers();
+
+            // 사용자가 텍스트박스에 입력한 값을 가져오자
+            string target = tbSearch.Text;
+            // API 호출
+            // 전달하고자 하는 URL
+            string url = string.Format("http://api.vworld.kr/req/search?service=search&request=search&version=2.0&crs=EPSG:4326&size=50&page=1&query={0}&type=place&format=json&errorformat=json&key=61AD03E1-3542-39A7-9AF6-E35EFC1562A0", target);
+
+            var client = new RestClient(url);   // 요청(url)을 서비스 제공자에게 전달하는 객체
+            client.Timeout = -1;
+            var request = new RestRequest(Method.GET);      // 요청을 처리하는 방법(데이터를 얻어보자)
+            IRestResponse response = client.Execute(request);       // 요청을 실행함
+
+            // JOjbect; JSON 타입의 객체
+            // var: 우항에서 데이터 타입을 유추
+            // var x = 10; var y = "홍길동"
+            var result = JObject.Parse(response.Content);   // 결과 데이터 파싱
+
+            // JSON 배열로 결과 저장
+            items = (JArray)result["response"]["result"]["items"];   //JSON 배열
+
+
+            foreach (var item in items)
+            {
+                lbData.Items.Add(item["title"]);
+            }
+     
+        }
+
+        private void axMap1_ProjectionMismatch(object sender, _DMapEvents_ProjectionMismatchEvent e)
+        {
+            e.reproject = tkMwBoolean.blnTrue;
+        }
+
+        private void lbData_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+
+            axMap1.RemoveAllLayers();
+            var item = items[lbData.SelectedIndex];
+
+            // 공간 데이터 생성하기
+            Shapefile sf = new Shapefile();     // 1. shapefile 생성
+            sf.CreateNew("", ShpfileType.SHP_POINT);     // 2. create 모드 활성화
+
+            //3. 공간 피쳐 생성
+            Shape shp = new Shape();    //3.1 shp 초기화
+            shp.Create(ShpfileType.SHP_POINT);     //3.2 shp 타입 선언
+            MapWinGIS.Point p = new MapWinGIS.Point();      //3.3 shp 구성요소
+            p.x = Convert.ToDouble(item["point"]["x"]);
+            p.y = Convert.ToDouble(item["point"]["y"]);
+
+          
+            //500m 범위 내 타릉이 탐색
+
+            string connStr =
+            "PG:host=localhost dbname=gis user=postgres password=34023193 port=5433";
+            string cmd = string.Format("select * from public_bicycle where ST_Within(ST_Transform(geom, 5186), ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint({0}, {1}), 4326), 5186), 500))", p.x, p.y);
+            int layerHandle = axMap1.AddLayerFromDatabase(connStr, cmd, true);
+            axMap1.set_LayerName(layerHandle, "따릉이 대여소");
+            Shapefile selectedPoints = axMap1.get_Shapefile(layerHandle);
+            selectedPoints.DefaultDrawingOptions.PointSize = 15;
+            selectedPoints.DefaultDrawingOptions.PointShape = tkPointShapeType.ptShapeCircle;
+
+            selectedPoints.GeoProjection.ImportFromEPSG(4326);
+            axMap1.AddLayer(selectedPoints,true);
+
+            // 버퍼 지역에 포함된 대여소 중 현재 위치와 가장 가까운 대여소 하이라이트
+            axMap1.ZoomToShape(0,lbData.SelectedIndex);
+            axMap1.CurrentScale = 7000; 
+            
+        }
+    }
+}

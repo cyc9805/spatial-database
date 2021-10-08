@@ -1,0 +1,24 @@
+-- 몇 개의 좌표계를 지원할까??
+-- SELECT 알고자 하는 컬럼 FROM 해당 컬럼이 저장된 테이블
+select * from spatial_ref_sys limit 1
+SELECT COUNT(*) FROM spatial_ref_sys;
+
+
+
+-- 상위 엔개의 데이터만 보고자 할 때
+select * from spatial_ref_sys limit 1;
+
+-- *: 모든 칼럼을 다 보고자 할 때
+-- 경위도 좌표계 (gcs), wgs84(4326)
+-- 4326은 wgs84 의 아이디-> 외우기!!!
+-- 조건 검색: where 조건
+select * from spatial_ref_sys where srid = 4326;
+--+proj=longlat +datum=WGS84 +no_defs 
+
+
+
+-- 투영 좌표계(pcs), 국내에 적용된 tm 좌표계(중부원점), 5186
+select * from spatial_ref_sys where srid = 5186;
+--+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs 
+
+
